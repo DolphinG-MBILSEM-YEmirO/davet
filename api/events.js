@@ -5,6 +5,7 @@
 //   PATCH  /api/events/:id                      edit (host only)
 //   DELETE /api/events/:id                      delete (host only)
 //   POST   /api/events/:id/rsvp                 add or change an RSVP
+//   POST   /api/events/:id/finalize             pick the time from a poll (host only)
 //   POST   /api/events/:id/comments             post on the wall
 //   DELETE /api/events/:id/comments/:commentId  remove a post (host or author)
 //
@@ -14,7 +15,13 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getStore } from './_lib/store.js';
-import { HttpError, validateEventInput, validateRsvpInput, validateCommentInput } from './_lib/validate.js';
+import {
+  HttpError,
+  validateEventInput,
+  validateRsvpInput,
+  validateCommentInput,
+  validateFinalizeInput,
+} from './_lib/validate.js';
 import { LIMITS } from '../js/shared/rules.js';
 
 const DAY_SECONDS = 24 * 60 * 60;
@@ -138,7 +145,7 @@ async function deleteEvent(store, req, id) {
 async function saveRsvp(store, req, id) {
   const event = await loadEvent(store, id);
   const body = await readBody(req);
-  const input = validateRsvpInput(body);
+  const input = validateRsvpInput(body, event);
   const now = new Date().toISOString();
 
   // Changing an existing RSVP requires the secret returned when it was made.
@@ -158,6 +165,27 @@ async function saveRsvp(store, req, id) {
   const rsvp = { id: newId(6), ...input, tokenHash: hashToken(guestToken), createdAt: now, updatedAt: now };
   await store.putRsvp(id, rsvp, ttlFor(event));
   return { status: 201, payload: { rsvp: publicEntry(rsvp), guestToken } };
+}
+
+/**
+ * Close a time poll. Guests who marked the chosen time become "going";
+ * everyone else who voted stays "maybe" so they can answer themselves.
+ */
+async function finalizeEvent(store, req, id) {
+  const event = await loadEvent(store, id);
+  requireHost(req, event);
+  const { startsAt } = validateFinalizeInput(await readBody(req), event);
+  const now = new Date().toISOString();
+  const updated = { ...event, startsAt, pollOpen: false, updatedAt: now };
+  await store.putEvent(updated, ttlFor(updated));
+
+  const rsvps = await store.getRsvps(id);
+  await Promise.all(
+    rsvps
+      .filter((rsvp) => rsvp.status === 'maybe' && rsvp.available?.includes(startsAt))
+      .map((rsvp) => store.putRsvp(id, { ...rsvp, status: 'going', updatedAt: now }, ttlFor(updated))),
+  );
+  return { status: 200, payload: { event: publicEvent(updated) } };
 }
 
 async function addComment(store, req, id) {
@@ -209,6 +237,7 @@ function route(req) {
     if (method === 'DELETE') return (store) => deleteEvent(store, req, id);
   }
   if (id && action === 'rsvp' && method === 'POST') return (store) => saveRsvp(store, req, id);
+  if (id && action === 'finalize' && method === 'POST') return (store) => finalizeEvent(store, req, id);
   if (id && action === 'comments' && !commentId && method === 'POST') return (store) => addComment(store, req, id);
   if (id && action === 'comments' && commentId && method === 'DELETE') {
     return (store) => removeComment(store, req, id, commentId);

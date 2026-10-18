@@ -14,7 +14,7 @@ const SAMPLE_INVITE = {
 };
 
 const STEPS = [
-  { emoji: '✍️', title: 'Daveti oluştur', text: 'Ne, nerede, ne zaman? Bir tema seç, 30 saniyede hazır.' },
+  { emoji: '✍️', title: 'Daveti oluştur', text: 'Ne, nerede, ne zaman? Saat belli değilse seçenek ekle, arkadaşların oylasın.' },
   { emoji: '💬', title: 'Linki gruba at', text: 'WhatsApp, Instagram ya da Discord. Kimsenin uygulama indirmesi gerekmez.' },
   { emoji: '🙋', title: 'Kim geliyor gör', text: 'Herkes tek dokunuşla cevap verir, duvara yazar. Sayım sende.' },
 ];
@@ -137,7 +137,7 @@ export function renderHome() {
 }
 
 function renderInviteItem(invite) {
-  const { label, past } = countdown(invite.startsAt);
+  const { label, past } = invite.pollOpen ? { label: 'Saat oylanıyor', past: false } : countdown(invite.startsAt);
   return el(
     'li',
     {},
@@ -149,7 +149,10 @@ function renderInviteItem(invite) {
         'span',
         { class: 'invite-item__text' },
         el('span', { class: 'invite-item__title', text: invite.title }),
-        el('span', { class: 'muted', text: `${formatDay(invite.startsAt)} · ${formatTime(invite.startsAt)}` }),
+        el('span', {
+          class: 'muted',
+          text: invite.pollOpen ? 'Herkese uyan saat seçiliyor' : `${formatDay(invite.startsAt)} · ${formatTime(invite.startsAt)}`,
+        }),
       ),
       el(
         'span',

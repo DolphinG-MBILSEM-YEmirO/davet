@@ -34,11 +34,27 @@ function startsAt(value) {
   return value;
 }
 
+/**
+ * An invite either has a fixed time (`startsAt`) or offers time options that
+ * guests vote on (`timeOptions`, an "ortak saat" poll). While the poll is open,
+ * `startsAt` holds the earliest option so sorting and expiry still work.
+ */
+function schedule(body) {
+  if (!Array.isArray(body?.timeOptions) || body.timeOptions.length === 0) {
+    return { startsAt: startsAt(body?.startsAt), timeOptions: [], pollOpen: false };
+  }
+  const options = [...new Set(body.timeOptions.map(startsAt))].sort();
+  if (options.length < LIMITS.timeOptionsMin || options.length > LIMITS.timeOptionsMax) {
+    throw new HttpError(400, `Oylama için ${LIMITS.timeOptionsMin}-${LIMITS.timeOptionsMax} farklı saat seçeneği ekleyin.`);
+  }
+  return { startsAt: options[0], timeOptions: options, pollOpen: true };
+}
+
 export function validateEventInput(body) {
   const theme = THEMES.some((item) => item.id === body?.theme) ? body.theme : THEMES[0].id;
   return {
     title: line(body?.title, { field: 'Başlık', max: LIMITS.title, required: true }),
-    startsAt: startsAt(body?.startsAt),
+    ...schedule(body),
     location: line(body?.location, { field: 'Yer', max: LIMITS.location }),
     description: text(body?.description, { field: 'Açıklama', max: LIMITS.description }),
     hostName: line(body?.hostName, { field: 'Adın', max: LIMITS.name, required: true }),
@@ -46,12 +62,28 @@ export function validateEventInput(body) {
   };
 }
 
-export function validateRsvpInput(body) {
-  if (!RSVP_STATUSES.includes(body?.status)) throw new HttpError(400, 'Bir cevap seçin.');
+/** The option a host picks to close a poll. */
+export function validateFinalizeInput(body, event) {
+  if (!event.pollOpen) throw new HttpError(409, 'Bu davetin saati zaten belli.');
+  if (!event.timeOptions.includes(body?.startsAt)) throw new HttpError(400, 'Seçeneklerden birini seçin.');
+  return { startsAt: body.startsAt };
+}
+
+/**
+ * While a time poll is open, guests send the options that suit them
+ * (`available`) and their status defaults to "maybe".
+ */
+export function validateRsvpInput(body, event) {
+  const available = event.pollOpen && Array.isArray(body?.available)
+    ? [...new Set(body.available)].filter((option) => event.timeOptions.includes(option)).sort()
+    : [];
+  const status = event.pollOpen && body?.status === undefined ? 'maybe' : body?.status;
+  if (!RSVP_STATUSES.includes(status)) throw new HttpError(400, 'Bir cevap seçin.');
   return {
     name: line(body?.name, { field: 'Adın', max: LIMITS.name, required: true }),
-    status: body.status,
+    status,
     note: line(body?.note, { field: 'Not', max: LIMITS.note }),
+    ...(event.pollOpen ? { available } : {}),
   };
 }
 

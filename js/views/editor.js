@@ -73,11 +73,20 @@ function field({ id, label, hint, input }) {
 
 function renderForm(context, initial, eventId) {
   const isEditing = Boolean(eventId);
-  const values = { ...initial };
+  const values = {
+    ...initial,
+    mode: initial.pollOpen ? 'poll' : 'fixed',
+    timeOptions: initial.pollOpen ? [...initial.timeOptions] : [initial.startsAt, ''],
+  };
+  // A fixed time can't be turned back into a poll once guests have answered it.
+  const canPoll = !isEditing || initial.pollOpen;
   const preview = el('div', { class: 'editor__preview' });
   const errorBox = el('p', { class: 'form-error', role: 'alert' });
 
-  const updatePreview = () => mount(preview, renderCover(values, { size: 'large', titleTag: 'p' }));
+  const previewStartsAt = () =>
+    values.mode === 'poll' ? values.timeOptions.filter(Boolean).sort()[0] || '' : values.startsAt;
+  const updatePreview = () =>
+    mount(preview, renderCover({ ...values, startsAt: previewStartsAt() }, { size: 'large', titleTag: 'p' }));
   updatePreview();
 
   const bind = (name) => (event) => {
@@ -106,6 +115,116 @@ function renderForm(context, initial, eventId) {
     ),
   );
 
+  const whenBox = el('div', { class: 'when' });
+
+  function renderWhen() {
+    const modeSwitch =
+      canPoll &&
+      el(
+        'div',
+        { class: 'segmented', role: 'radiogroup', 'aria-label': 'Saat' },
+        [
+          ['fixed', 'Saat belli'],
+          ['poll', '🗳️ Arkadaşlarım oylasın'],
+        ].map(([mode, label]) =>
+          el(
+            'label',
+            { class: 'segmented__option' },
+            el('input', {
+              type: 'radio',
+              name: 'when-mode',
+              value: mode,
+              checked: values.mode === mode,
+              onchange: () => {
+                values.mode = mode;
+                renderWhen();
+                updatePreview();
+                whenBox.querySelector(`input[value="${mode}"]`)?.focus();
+              },
+            }),
+            el('span', { text: label }),
+          ),
+        ),
+      );
+
+    if (values.mode === 'fixed') {
+      mount(
+        whenBox,
+        el('p', { class: 'when__label', text: 'Ne zaman?' }),
+        modeSwitch,
+        el('label', { class: 'visually-hidden', for: 'startsAt', text: 'Tarih ve saat' }),
+        el('input', {
+          id: 'startsAt',
+          name: 'startsAt',
+          type: 'datetime-local',
+          required: true,
+          value: values.startsAt,
+          oninput: bind('startsAt'),
+        }),
+      );
+      return;
+    }
+
+    const canAdd = values.timeOptions.length < LIMITS.timeOptionsMax;
+    const canRemove = values.timeOptions.length > LIMITS.timeOptionsMin;
+    mount(
+      whenBox,
+      el('p', { class: 'when__label', text: 'Ne zaman?' }),
+      modeSwitch,
+      el('p', { class: 'field__hint', text: 'Birkaç seçenek ekle; herkes uyduğu saatleri işaretlesin, en çok oyu alanı sen seç.' }),
+      el(
+        'ol',
+        { class: 'option-inputs' },
+        values.timeOptions.map((option, index) =>
+          el(
+            'li',
+            {},
+            el('label', { class: 'visually-hidden', for: `option-${index}`, text: `${index + 1}. seçenek` }),
+            el('input', {
+              id: `option-${index}`,
+              type: 'datetime-local',
+              value: option,
+              oninput: (event) => {
+                values.timeOptions[index] = event.target.value;
+                updatePreview();
+              },
+            }),
+            canRemove &&
+              el(
+                'button',
+                {
+                  class: 'icon-button',
+                  type: 'button',
+                  'aria-label': `${index + 1}. seçeneği kaldır`,
+                  onclick: () => {
+                    values.timeOptions.splice(index, 1);
+                    renderWhen();
+                    updatePreview();
+                  },
+                },
+                '✕',
+              ),
+          ),
+        ),
+      ),
+      canAdd &&
+        el(
+          'button',
+          {
+            class: 'button button--ghost button--small',
+            type: 'button',
+            onclick: () => {
+              values.timeOptions.push('');
+              renderWhen();
+              whenBox.querySelector(`#option-${values.timeOptions.length - 1}`)?.focus();
+            },
+          },
+          '+ Seçenek ekle',
+        ),
+    );
+  }
+  renderWhen();
+
   const submitButton = el('button', { class: 'button button--large', type: 'submit' }, isEditing ? 'Kaydet' : 'Daveti oluştur');
 
   async function onSubmit(event) {
@@ -116,7 +235,9 @@ function renderForm(context, initial, eventId) {
 
     const input = {
       title: values.title,
-      startsAt: values.startsAt,
+      ...(values.mode === 'poll'
+        ? { timeOptions: values.timeOptions.filter(Boolean) }
+        : { startsAt: values.startsAt }),
       location: values.location,
       description: values.description,
       hostName: values.hostName,
@@ -133,7 +254,7 @@ function renderForm(context, initial, eventId) {
         const { id, hostToken } = await api.createEvent(input);
         local.setHostToken(id, hostToken);
         local.setName(input.hostName.trim());
-        local.rememberInvite({ id, ...input }, 'host');
+        local.rememberInvite({ id, ...input, startsAt: previewStartsAt(), pollOpen: values.mode === 'poll' }, 'host');
         context.navigate(`/e/${id}?yeni=1`, { replace: true });
       }
     } catch (error) {
@@ -170,18 +291,7 @@ function renderForm(context, initial, eventId) {
         }),
       }),
       themePicker,
-      field({
-        id: 'startsAt',
-        label: 'Ne zaman?',
-        input: el('input', {
-          id: 'startsAt',
-          name: 'startsAt',
-          type: 'datetime-local',
-          required: true,
-          value: values.startsAt,
-          oninput: bind('startsAt'),
-        }),
-      }),
+      whenBox,
       field({
         id: 'location',
         label: 'Nerede?',

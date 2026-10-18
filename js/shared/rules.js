@@ -25,6 +25,9 @@ export const LIMITS = {
   comment: 500,
   rsvpsPerEvent: 300,
   commentsPerEvent: 500,
+  // "Ortak saat" polls: the host offers this many time options.
+  timeOptionsMin: 2,
+  timeOptionsMax: 6,
 };
 
 /** Local wall-clock time "YYYY-MM-DDTHH:mm", as produced by <input type="datetime-local">. */

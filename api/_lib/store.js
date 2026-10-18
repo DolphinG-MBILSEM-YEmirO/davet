@@ -1,6 +1,9 @@
 // Storage for events, RSVPs and comments.
 //
-// Production uses Upstash Redis over its REST API (no npm dependency). The
+// Postgres (Supabase) is used when POSTGRES_URL or DATABASE_URL is set; see
+// postgres-store.js.
+//
+// Otherwise Upstash Redis is used over its REST API (no npm dependency). The
 // Vercel "Upstash for Redis" integration sets KV_REST_API_URL/TOKEN; the
 // UPSTASH_* names are accepted too. Without them, an in-memory store is used,
 // which is only meant for local development and tests.
@@ -9,6 +12,8 @@
 //   event:<id>     JSON string with the event
 //   rsvps:<id>     hash  guestId   -> JSON RSVP
 //   comments:<id>  hash  commentId -> JSON comment
+
+import { createPostgresStore } from './postgres-store.js';
 
 const eventKey = (id) => `event:${id}`;
 const rsvpKey = (id) => `rsvps:${id}`;
@@ -155,14 +160,20 @@ function createMemoryStore() {
 
 let store = null;
 
-/** Returns the configured store, or null when production storage is missing. */
+/**
+ * Returns the configured store, or null when production storage is missing.
+ * Postgres (e.g. Supabase connected through Vercel) wins over Redis.
+ */
 export function getStore() {
   if (store) return store;
 
+  const postgresUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL;
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
-  if (url && token) {
+  if (postgresUrl) {
+    store = createPostgresStore(postgresUrl);
+  } else if (url && token) {
     store = createRedisStore(url.replace(/\/$/, ''), token);
   } else if (process.env.VERCEL) {
     // Deployed without a database: refuse rather than silently lose data.

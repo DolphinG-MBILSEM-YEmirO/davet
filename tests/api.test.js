@@ -121,3 +121,44 @@ test('rate limits writes per IP', async () => {
   }
   assert.equal(lastStatus, 429);
 });
+
+test('time polls: guests vote, the host picks, voters become "going"', async () => {
+  const options = ['2030-05-12T19:00', '2030-05-10T20:00', '2030-05-11T18:30'];
+  const { startsAt, ...rest } = validEvent;
+  const created = await call('POST', '/api/events', { ...rest, timeOptions: options }, { 'X-Forwarded-For': '10.0.0.2' });
+  assert.equal(created.status, 201);
+  const { id, hostToken } = created.data;
+  const headers = { 'X-Forwarded-For': '10.0.0.2' };
+
+  const { data: open } = await call('GET', `/api/events/${id}`, undefined, headers);
+  assert.equal(open.event.pollOpen, true);
+  assert.deepEqual(open.event.timeOptions, [...options].sort());
+  assert.equal(open.event.startsAt, '2030-05-10T20:00');
+
+  const ali = await call('POST', `/api/events/${id}/rsvp`, { name: 'Ali', available: ['2030-05-11T18:30', 'bogus'] }, headers);
+  assert.equal(ali.status, 201);
+  assert.equal(ali.data.rsvp.status, 'maybe');
+  assert.deepEqual(ali.data.rsvp.available, ['2030-05-11T18:30']);
+  await call('POST', `/api/events/${id}/rsvp`, { name: 'Ayşe', available: ['2030-05-10T20:00'] }, headers);
+
+  const pick = { startsAt: '2030-05-11T18:30' };
+  assert.equal((await call('POST', `/api/events/${id}/finalize`, pick, headers)).status, 403);
+  assert.equal((await call('POST', `/api/events/${id}/finalize`, { startsAt: '2030-01-01T10:00' }, { ...headers, 'X-Host-Token': hostToken })).status, 400);
+  const finalized = await call('POST', `/api/events/${id}/finalize`, pick, { ...headers, 'X-Host-Token': hostToken });
+  assert.equal(finalized.status, 200);
+  assert.equal(finalized.data.event.pollOpen, false);
+  assert.equal(finalized.data.event.startsAt, '2030-05-11T18:30');
+
+  const { data: closed } = await call('GET', `/api/events/${id}`, undefined, headers);
+  const byName = Object.fromEntries(closed.rsvps.map((rsvp) => [rsvp.name, rsvp.status]));
+  assert.deepEqual(byName, { Ali: 'going', Ayşe: 'maybe' });
+  assert.equal((await call('POST', `/api/events/${id}/finalize`, pick, { ...headers, 'X-Host-Token': hostToken })).status, 409);
+});
+
+test('time polls need 2 to 6 distinct options', async () => {
+  const { startsAt, ...rest } = validEvent;
+  const headers = { 'X-Forwarded-For': '10.0.0.3' };
+  assert.equal((await call('POST', '/api/events', { ...rest, timeOptions: ['2030-05-10T20:00', '2030-05-10T20:00'] }, headers)).status, 400);
+  const seven = Array.from({ length: 7 }, (_, i) => `2030-05-1${i}T20:00`);
+  assert.equal((await call('POST', '/api/events', { ...rest, timeOptions: seven }, headers)).status, 400);
+});

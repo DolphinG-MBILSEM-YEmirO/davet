@@ -45,6 +45,8 @@ export const api = {
   getEvent: (id) => request('GET', `/${encodeURIComponent(id)}`, { headers: hostHeaders(id) }),
   updateEvent: (id, input) => request('PATCH', `/${encodeURIComponent(id)}`, { body: input, headers: hostHeaders(id) }),
   deleteEvent: (id) => request('DELETE', `/${encodeURIComponent(id)}`, { headers: hostHeaders(id) }),
+  finalizeEvent: (id, startsAt) =>
+    request('POST', `/${encodeURIComponent(id)}/finalize`, { body: { startsAt }, headers: hostHeaders(id) }),
 
   saveRsvp(id, input) {
     const own = local.rsvp(id);

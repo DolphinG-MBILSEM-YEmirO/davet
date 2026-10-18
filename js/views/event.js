@@ -82,6 +82,7 @@ function createEventPage(id, initialData, context, { isNew }) {
   };
 
   const headerBox = el('div', { class: 'event-header' });
+  const shareBox = el('div');
   const countsBox = el('p', { class: 'event-counts', 'aria-live': 'polite' });
   const rsvpBox = el('section', { class: 'panel rsvp', 'aria-labelledby': 'rsvp-heading' });
   const guestsBox = el('section', { class: 'panel', 'aria-labelledby': 'guests-heading' });
@@ -93,12 +94,15 @@ function createEventPage(id, initialData, context, { isNew }) {
 
   function renderHeader() {
     const { event, isHost } = state;
-    const { label, past } = countdown(event.startsAt);
+    const { label, past } = event.pollOpen ? { label: '🗳️ Saat oylanıyor', past: false } : countdown(event.startsAt);
+    const when = event.pollOpen
+      ? `Saat oylanıyor · ${event.timeOptions.length} seçenek`
+      : `${formatDay(event.startsAt)} · ${formatTime(event.startsAt)}`;
     context.setTitle(event.title);
 
     mount(
       headerBox,
-      renderCover(event),
+      renderCover(event.pollOpen ? { ...event, startsAt: null } : event),
       el(
         'div',
         { class: 'event-info' },
@@ -106,7 +110,7 @@ function createEventPage(id, initialData, context, { isNew }) {
         el(
           'ul',
           { class: 'event-facts' },
-          el('li', {}, el('span', { 'aria-hidden': 'true', text: '📅' }), `${formatDay(event.startsAt)} · ${formatTime(event.startsAt)}`),
+          el('li', {}, el('span', { 'aria-hidden': 'true', text: '📅' }), when),
           event.location &&
             el(
               'li',
@@ -134,9 +138,15 @@ function createEventPage(id, initialData, context, { isNew }) {
         isHost && renderHostTools(),
       ),
     );
+    mount(shareBox, renderShare());
   }
 
   function renderCounts() {
+    if (state.event.pollOpen) {
+      const voters = state.rsvps.filter((rsvp) => rsvp.available?.length).length;
+      countsBox.textContent = voters ? `${voters} kişi oy verdi` : 'Henüz oy yok. İlk sen ol!';
+      return;
+    }
     const count = (status) => state.rsvps.filter((rsvp) => rsvp.status === status).length;
     const going = count('going');
     const maybe = count('maybe');
@@ -183,7 +193,10 @@ function createEventPage(id, initialData, context, { isNew }) {
   }
 
   function renderShare() {
-    const message = `${state.event.title} · ${formatDay(state.event.startsAt)} ${formatTime(state.event.startsAt)}\nGeliyor musun? 👉 ${shareUrl}`;
+    const { event } = state;
+    const message = event.pollOpen
+      ? `${event.title}\nHangi saat uyar? Oyla 👉 ${shareUrl}`
+      : `${event.title} · ${formatDay(event.startsAt)} ${formatTime(event.startsAt)}\nGeliyor musun? 👉 ${shareUrl}`;
     const buttons = [
       el(
         'a',
@@ -225,17 +238,19 @@ function createEventPage(id, initialData, context, { isNew }) {
         ),
       );
     }
-    buttons.push(
-      el(
-        'button',
-        {
-          class: 'button button--ghost',
-          type: 'button',
-          onclick: () => downloadText('davet.ics', buildEventIcs(state.event, shareUrl), 'text/calendar'),
-        },
-        'Takvime ekle',
-      ),
-    );
+    if (!event.pollOpen) {
+      buttons.push(
+        el(
+          'button',
+          {
+            class: 'button button--ghost',
+            type: 'button',
+            onclick: () => downloadText('davet.ics', buildEventIcs(event, shareUrl), 'text/calendar'),
+          },
+          'Takvime ekle',
+        ),
+      );
+    }
 
     return el(
       'section',
@@ -248,6 +263,10 @@ function createEventPage(id, initialData, context, { isNew }) {
   }
 
   function renderRsvp() {
+    if (state.event.pollOpen) {
+      renderPoll();
+      return;
+    }
     const mine = ownRsvp();
     const past = countdown(state.event.startsAt).past;
     const heading = el('h2', { id: 'rsvp-heading', text: past ? 'Bu plan bitti' : 'Geliyor musun?' });
@@ -359,16 +378,144 @@ function createEventPage(id, initialData, context, { isNew }) {
     );
   }
 
+  /**
+   * "Ortak saat" poll: everyone ticks the options that suit them, the best
+   * option is highlighted, and the host locks in the final time.
+   */
+  function renderPoll() {
+    const { event, isHost } = state;
+    const mine = ownRsvp();
+    const myChoices = new Set(mine?.available || []);
+    const votesFor = (option) => state.rsvps.filter((rsvp) => rsvp.available?.includes(option));
+    const bestCount = Math.max(0, ...event.timeOptions.map((option) => votesFor(option).length));
+    const errorBox = el('p', { class: 'form-error', role: 'alert' });
+
+    const nameInput = el('input', {
+      id: 'poll-name',
+      maxlength: LIMITS.name,
+      autocomplete: 'given-name',
+      placeholder: 'Adın',
+      value: mine?.name || local.name(),
+    });
+
+    async function pick(option, button) {
+      button.disabled = true;
+      try {
+        await api.finalizeEvent(id, option);
+        // Reload so the RSVPs promoted to "going" show up too.
+        state = await api.getEvent(id);
+        local.rememberInvite(state.event, 'host');
+        showToast('Saat belirlendi, oy verenler "geliyor" oldu 🎉');
+        renderHeader();
+        renderCounts();
+        renderRsvp();
+        renderGuests();
+      } catch (error) {
+        button.disabled = false;
+        showToast(error.message);
+      }
+    }
+
+    const optionRows = event.timeOptions.map((option, index) => {
+      const voters = votesFor(option);
+      const isBest = bestCount > 0 && voters.length === bestCount;
+      const checkboxId = `poll-option-${index}`;
+      return el(
+        'li',
+        { class: `poll-option${isBest ? ' poll-option--best' : ''}` },
+        el('input', { id: checkboxId, type: 'checkbox', value: option, checked: myChoices.has(option) }),
+        el(
+          'label',
+          { for: checkboxId, class: 'poll-option__label' },
+          el('span', { class: 'poll-option__day', text: formatDay(option) }),
+          el('span', { class: 'poll-option__time', text: formatTime(option) }),
+        ),
+        el(
+          'span',
+          { class: 'poll-option__votes' },
+          isBest && el('span', { class: 'tag tag--soon', text: 'En uygun' }),
+          el('span', { class: 'poll-option__count', text: `${voters.length} kişi` }),
+        ),
+        el('span', {
+          class: 'poll-option__bar',
+          style: `--share: ${state.rsvps.length ? voters.length / state.rsvps.length : 0}`,
+          'aria-hidden': 'true',
+        }),
+        voters.length > 0 &&
+          el('span', { class: 'poll-option__names', text: voters.map((rsvp) => rsvp.name).join(', ') }),
+        isHost &&
+          el(
+            'button',
+            {
+              class: 'button button--small button--secondary poll-option__pick',
+              type: 'button',
+              onclick: (clickEvent) => pick(option, clickEvent.currentTarget),
+            },
+            'Bu saati seç',
+          ),
+      );
+    });
+
+    async function onSubmit(submitEvent) {
+      submitEvent.preventDefault();
+      errorBox.textContent = '';
+      if (!nameInput.value.trim()) {
+        errorBox.textContent = 'Önce adını yaz ki kim olduğunu bilelim.';
+        nameInput.focus();
+        return;
+      }
+      const available = [...rsvpBox.querySelectorAll('.poll-option input:checked')].map((input) => input.value);
+      const button = submitEvent.submitter;
+      if (button) button.disabled = true;
+      try {
+        const result = await api.saveRsvp(id, {
+          name: nameInput.value,
+          status: available.length ? 'maybe' : 'declined',
+          available,
+        });
+        if (result.guestToken) local.setRsvp(id, { guestId: result.rsvp.id, guestToken: result.guestToken });
+        local.setName(result.rsvp.name);
+        if (wallNameInput && !wallNameInput.value.trim()) wallNameInput.value = result.rsvp.name;
+        local.rememberInvite(state.event, 'guest');
+        state = { ...state, rsvps: [...state.rsvps.filter((rsvp) => rsvp.id !== result.rsvp.id), result.rsvp] };
+        showToast(available.length ? 'Oyun kaydedildi 🗳️' : 'Hiçbir saat uymuyor diye kaydettik');
+        renderRsvp();
+        renderCounts();
+        renderGuests();
+      } catch (error) {
+        errorBox.textContent = error.message;
+        if (button) button.disabled = false;
+      }
+    }
+
+    mount(
+      rsvpBox,
+      el('h2', { id: 'rsvp-heading', text: 'Hangi saat uyar?' }),
+      el('p', { class: 'muted', text: isHost ? 'Oylar geldikçe en uygun saati seç.' : 'Uyan saatlerin hepsini işaretle.' }),
+      el(
+        'form',
+        { class: 'poll', onsubmit: onSubmit },
+        el('ul', { class: 'poll__options' }, optionRows),
+        el('label', { class: 'visually-hidden', for: 'poll-name', text: 'Adın' }),
+        nameInput,
+        errorBox,
+        el('div', { class: 'button-row' }, el('button', { class: 'button', type: 'submit' }, mine ? 'Oyumu güncelle' : 'Oyumu kaydet')),
+      ),
+    );
+  }
+
   function renderGuests() {
     const mine = local.rsvp(id);
-    const groups = Object.keys(STATUS).map((status) => ({
-      status,
-      people: state.rsvps.filter((rsvp) => rsvp.status === status),
-    }));
+    const groups = state.event.pollOpen
+      ? [{ title: `🗳️ Oy verenler`, people: state.rsvps }]
+      : Object.keys(STATUS).map((status) => ({
+          title: `${STATUS[status].emoji} ${STATUS[status].group}`,
+          people: state.rsvps.filter((rsvp) => rsvp.status === status),
+        }));
 
     mount(
       guestsBox,
-      el('h2', { id: 'guests-heading', text: 'Kimler geliyor?' }),
+      el('h2', { id: 'guests-heading', text: state.event.pollOpen ? 'Kimler katılıyor?' : 'Kimler geliyor?' }),
       state.rsvps.length === 0
         ? el('p', { class: 'muted', text: 'Linki paylaş, cevaplar burada görünsün.' })
         : groups
@@ -377,7 +524,7 @@ function createEventPage(id, initialData, context, { isNew }) {
               el(
                 'div',
                 { class: 'guest-group' },
-                el('h3', { text: `${STATUS[group.status].emoji} ${STATUS[group.status].group} (${group.people.length})` }),
+                el('h3', { text: `${group.title} (${group.people.length})` }),
                 el(
                   'ul',
                   { class: 'guest-list' },
@@ -519,7 +666,7 @@ function createEventPage(id, initialData, context, { isNew }) {
   const node = el(
     'div',
     { class: 'event-layout' },
-    el('div', { class: 'event-layout__main' }, headerBox, renderShare()),
+    el('div', { class: 'event-layout__main' }, headerBox, shareBox),
     el('div', { class: 'event-layout__side' }, rsvpBox, guestsBox, renderWall()),
   );
 
@@ -527,10 +674,11 @@ function createEventPage(id, initialData, context, { isNew }) {
     node,
     update(data) {
       const detailsChanged = data.event.updatedAt !== state.event.updatedAt;
+      const pollClosed = state.event.pollOpen && !data.event.pollOpen;
       state = data;
       if (detailsChanged) renderHeader();
       renderCounts();
-      if (!editingRsvp && !rsvpBox.contains(document.activeElement)) renderRsvp();
+      if (pollClosed || (!editingRsvp && !rsvpBox.contains(document.activeElement))) renderRsvp();
       renderGuests();
       renderWallList();
     },

@@ -1,19 +1,21 @@
-/* Davet: playful, mobile-first styles. Plain CSS, no build step. */
+/* Davet (part of CepDost): playful, mobile-first styles. Plain CSS, no build step.
+   Colors follow CepDost's coral and cream palette (brand coral #FF5A3C). */
 
 /* ---------- Tokens ---------- */
 
 :root {
-  --bg: #fbf7f2;
+  --bg: #fff8f0;
   --surface: #ffffff;
-  --surface-soft: #f4eee7;
-  --text: #1d1726;
-  --text-muted: #6b6276;
-  --border: #e9e1d8;
-  --primary: #7c3aed;
-  --primary-hover: #6d28d9;
-  --primary-soft: #efe7fe;
+  --surface-soft: #fbeee4;
+  --text: #24160f;
+  --text-muted: #725f55;
+  --border: #f0dfd2;
+  --brand: #ff5a3c;
+  --primary: #c9381e;
+  --primary-hover: #b83219;
+  --primary-soft: #ffe7de;
   --on-primary: #ffffff;
-  --accent: #ff5f6d;
+  --accent: #ff5a3c;
   --going: #16a34a;
   --going-soft: #dcfce7;
   --maybe: #d97706;
@@ -34,16 +36,16 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #120f18;
-    --surface: #1c1824;
-    --surface-soft: #251f2f;
-    --text: #f4f0f8;
-    --text-muted: #a59cb3;
-    --border: #2f2839;
-    --primary: #a78bfa;
-    --primary-hover: #c4b5fd;
-    --primary-soft: #2c2342;
-    --on-primary: #1a1325;
+    --bg: #16110f;
+    --surface: #211915;
+    --surface-soft: #2b211c;
+    --text: #fbf1ea;
+    --text-muted: #bba597;
+    --border: #3a2c25;
+    --primary: #ff8a70;
+    --primary-hover: #ffa48f;
+    --primary-soft: #3a211a;
+    --on-primary: #1a1210;
     --going: #4ade80;
     --going-soft: #173323;
     --maybe: #fbbf24;
@@ -127,6 +129,11 @@ main:focus {
   outline: none;
 }
 
+/* Components set their own display, which would otherwise beat [hidden]. */
+[hidden] {
+  display: none !important;
+}
+
 .muted {
   color: var(--text-muted);
 }
@@ -194,7 +201,7 @@ main:focus {
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #ff5f6d, #ffc371);
+  background: linear-gradient(135deg, #ff5a3c, #ffa26b);
   font-size: 1.1rem;
 }
 
@@ -507,7 +514,7 @@ main:focus {
 }
 
 .highlight {
-  background: linear-gradient(90deg, #ff5f6d, #7c3aed);
+  background: linear-gradient(90deg, #ff5a3c, #c9381e);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1136,4 +1143,185 @@ textarea:focus {
 .toast--visible {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* ---------- CepDost link ---------- */
+
+.brand__family {
+  margin-left: 2px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.site-footer a {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* ---------- When: fixed time or poll ---------- */
+
+.when {
+  display: grid;
+  gap: 10px;
+}
+
+.when__label {
+  margin: 0;
+  font-weight: 700;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.segmented__option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.segmented__option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented__option:has(input:checked) {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow);
+}
+
+.segmented__option:has(input:focus-visible) {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.option-inputs {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.option-inputs li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.icon-button {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  color: var(--danger);
+}
+
+.when .button--small {
+  justify-self: start;
+}
+
+/* ---------- Poll on the invite page ---------- */
+
+.poll {
+  display: grid;
+  gap: 12px;
+}
+
+.poll__options {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.poll-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.poll-option--best {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.poll-option input {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.poll-option__label {
+  display: grid;
+  cursor: pointer;
+}
+
+.poll-option__day {
+  font-weight: 700;
+}
+
+.poll-option__time {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.poll-option__votes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.poll-option__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  width: calc(var(--share) * 100%);
+  background: var(--primary-soft);
+  transition: width 0.3s;
+}
+
+.poll-option__names {
+  grid-column: 2 / -1;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.poll-option__pick {
+  grid-column: 2 / -1;
+  justify-self: start;
 }
