@@ -1,9 +1,10 @@
-// Input validation for the API. Each function returns clean values or throws
-// an HttpError with a user-facing (Turkish) message.
+// Validation shared by writing (before publishing) and reading (events from
+// relays are untrusted). Each function returns clean values or throws
+// a ValidationError with a user-facing (Turkish) message.
 
-import { THEMES, RSVP_STATUSES, LIMITS, DATETIME_PATTERN } from '../../js/shared/rules.js';
+import { THEMES, RSVP_STATUSES, LIMITS, DATETIME_PATTERN } from './rules.js';
 
-export class HttpError extends Error {
+export class ValidationError extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
@@ -13,8 +14,8 @@ export class HttpError extends Error {
 /** Trim a string field and enforce length limits. */
 function text(value, { field, max, required = false }) {
   const clean = typeof value === 'string' ? value.trim().replace(/\s+\n/g, '\n') : '';
-  if (required && !clean) throw new HttpError(400, `${field} boş olamaz.`);
-  if (clean.length > max) throw new HttpError(400, `${field} en fazla ${max} karakter olabilir.`);
+  if (required && !clean) throw new ValidationError(400, `${field} boş olamaz.`);
+  if (clean.length > max) throw new ValidationError(400, `${field} en fazla ${max} karakter olabilir.`);
   return clean;
 }
 
@@ -25,11 +26,11 @@ function line(value, options) {
 
 function startsAt(value) {
   if (typeof value !== 'string' || !DATETIME_PATTERN.test(value)) {
-    throw new HttpError(400, 'Geçerli bir tarih ve saat seçin.');
+    throw new ValidationError(400, 'Geçerli bir tarih ve saat seçin.');
   }
   const date = new Date(`${value}:00Z`);
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 16) !== value) {
-    throw new HttpError(400, 'Geçerli bir tarih ve saat seçin.');
+    throw new ValidationError(400, 'Geçerli bir tarih ve saat seçin.');
   }
   return value;
 }
@@ -45,7 +46,7 @@ function schedule(body) {
   }
   const options = [...new Set(body.timeOptions.map(startsAt))].sort();
   if (options.length < LIMITS.timeOptionsMin || options.length > LIMITS.timeOptionsMax) {
-    throw new HttpError(400, `Oylama için ${LIMITS.timeOptionsMin}-${LIMITS.timeOptionsMax} farklı saat seçeneği ekleyin.`);
+    throw new ValidationError(400, `Oylama için ${LIMITS.timeOptionsMin}-${LIMITS.timeOptionsMax} farklı saat seçeneği ekleyin.`);
   }
   return { startsAt: options[0], timeOptions: options, pollOpen: true };
 }
@@ -64,8 +65,8 @@ export function validateEventInput(body) {
 
 /** The option a host picks to close a poll. */
 export function validateFinalizeInput(body, event) {
-  if (!event.pollOpen) throw new HttpError(409, 'Bu davetin saati zaten belli.');
-  if (!event.timeOptions.includes(body?.startsAt)) throw new HttpError(400, 'Seçeneklerden birini seçin.');
+  if (!event.pollOpen) throw new ValidationError(409, 'Bu davetin saati zaten belli.');
+  if (!event.timeOptions.includes(body?.startsAt)) throw new ValidationError(400, 'Seçeneklerden birini seçin.');
   return { startsAt: body.startsAt };
 }
 
@@ -78,7 +79,7 @@ export function validateRsvpInput(body, event) {
     ? [...new Set(body.available)].filter((option) => event.timeOptions.includes(option)).sort()
     : [];
   const status = event.pollOpen && body?.status === undefined ? 'maybe' : body?.status;
-  if (!RSVP_STATUSES.includes(status)) throw new HttpError(400, 'Bir cevap seçin.');
+  if (!RSVP_STATUSES.includes(status)) throw new ValidationError(400, 'Bir cevap seçin.');
   return {
     name: line(body?.name, { field: 'Adın', max: LIMITS.name, required: true }),
     status,

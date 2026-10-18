@@ -1,7 +1,9 @@
-// What this browser remembers: the visitor's name, secret tokens for things
-// they created, and a list of invites they host or answered ("Davetlerim").
+// What this browser remembers: the visitor's name, the keys that prove who
+// they are, and a list of invites they host or answered ("Davetlerim").
+// Clearing site data loses these, and with them the right to edit.
 
 import { loadJSON, saveJSON } from './storage.js';
+import { randomBytes, toBase64Url } from './crypto.js';
 
 const MAX_SAVED_INVITES = 50;
 
@@ -16,15 +18,19 @@ export const local = {
   name: () => loadJSON('name', ''),
   setName: (name) => saveJSON('name', name),
 
+  /** Random seed for this browser's per-invite signing keys (see crypto.js). */
+  seed() {
+    let seed = loadJSON('seed', null);
+    if (!seed) {
+      seed = toBase64Url(randomBytes(32));
+      saveJSON('seed', seed);
+    }
+    return seed;
+  },
+
+  /** The host's secret signing key (hex) for an invite they created. */
   hostToken: (eventId) => loadJSON('hostTokens', {})[eventId] || null,
   setHostToken: (eventId, token) => update('hostTokens', {}, (all) => ({ ...all, [eventId]: token })),
-
-  /** The visitor's own RSVP for an event: { guestId, guestToken }. */
-  rsvp: (eventId) => loadJSON('rsvps', {})[eventId] || null,
-  setRsvp: (eventId, value) => update('rsvps', {}, (all) => ({ ...all, [eventId]: value })),
-
-  commentToken: (commentId) => loadJSON('commentTokens', {})[commentId] || null,
-  setCommentToken: (commentId, token) => update('commentTokens', {}, (all) => ({ ...all, [commentId]: token })),
 
   /** Invites shown on the home page, newest activity first. */
   invites: () => loadJSON('invites', []),

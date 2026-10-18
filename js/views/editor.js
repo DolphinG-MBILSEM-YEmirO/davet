@@ -24,7 +24,7 @@ export function renderEditor(context, eventId) {
   const container = el('div', { class: 'editor-page' });
 
   if (!eventId) {
-    const theme = new URLSearchParams(window.location.search).get('tema');
+    const theme = context.query.get('tema');
     context.setTitle('Yeni davet');
     mount(container, renderForm(context, {
       title: '',
@@ -43,12 +43,12 @@ export function renderEditor(context, eventId) {
     .getEvent(eventId)
     .then(({ event, isHost }) => {
       if (!isHost) {
-        mount(container, renderMessage('Bu daveti yalnızca oluşturan kişi düzenleyebilir.', `/e/${eventId}`));
+        mount(container, renderMessage('Bu daveti yalnızca oluşturan kişi düzenleyebilir.', `#/e/${eventId}`));
         return;
       }
       mount(container, renderForm(context, event, eventId));
     })
-    .catch((error) => mount(container, renderMessage(error.message, '/')));
+    .catch((error) => mount(container, renderMessage(error.message, '#/')));
   return container;
 }
 
@@ -251,8 +251,8 @@ function renderForm(context, initial, eventId) {
         showToast('Değişiklikler kaydedildi');
         context.navigate(`/e/${eventId}`, { replace: true });
       } else {
-        const { id, hostToken } = await api.createEvent(input);
-        local.setHostToken(id, hostToken);
+        // The data layer stores the host's key itself.
+        const { id } = await api.createEvent(input);
         local.setName(input.hostName.trim());
         local.rememberInvite({ id, ...input, startsAt: previewStartsAt(), pollOpen: values.mode === 'poll' }, 'host');
         context.navigate(`/e/${id}?yeni=1`, { replace: true });
@@ -342,7 +342,7 @@ function renderForm(context, initial, eventId) {
         'div',
         { class: 'button-row' },
         submitButton,
-        el('a', { class: 'button button--ghost', href: isEditing ? `/e/${eventId}` : '/' }, 'Vazgeç'),
+        el('a', { class: 'button button--ghost', href: isEditing ? `#/e/${eventId}` : '#/' }, 'Vazgeç'),
       ),
     ),
   );

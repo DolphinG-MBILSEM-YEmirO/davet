@@ -11,7 +11,7 @@ import { renderCover } from './components/cover.js';
 import { renderAvatar } from './components/avatar.js';
 import { showToast } from './components/toast.js';
 
-const REFRESH_MS = 20000;
+const REFRESH_MS = 15000;
 
 const STATUS = {
   going: { emoji: '🙌', button: 'Geliyorum', group: 'Geliyor' },
@@ -23,8 +23,8 @@ export function renderEvent(id, context) {
   const container = el('div', { class: 'event-page' });
   mount(container, el('p', { class: 'loading', text: 'Davet yükleniyor…' }));
 
-  const isNew = new URLSearchParams(window.location.search).has('yeni');
-  if (isNew) history.replaceState(null, '', `/e/${id}`);
+  const isNew = context.query.has('yeni');
+  if (isNew) history.replaceState(null, '', `#/e/${id}`);
 
   api
     .getEvent(id)
@@ -43,7 +43,7 @@ export function renderEvent(id, context) {
           el('span', { class: 'empty-state__emoji', 'aria-hidden': 'true', text: '🫥' }),
           el('h1', { text: error.status === 404 ? 'Bu davet bulunamadı' : 'Davet yüklenemedi' }),
           el('p', { class: 'muted', text: error.message }),
-          el('a', { class: 'button', href: '/yeni' }, 'Yeni davet oluştur'),
+          el('a', { class: 'button', href: '#/yeni' }, 'Yeni davet oluştur'),
         ),
       );
     });
@@ -74,12 +74,9 @@ function startRefreshing(id, page, context) {
  */
 function createEventPage(id, initialData, context, { isNew }) {
   let state = initialData;
-  const shareUrl = `${window.location.origin}/e/${id}`;
+  const shareUrl = `${window.location.href.split('#')[0]}#/e/${id}`;
 
-  const ownRsvp = () => {
-    const mine = local.rsvp(id);
-    return mine ? state.rsvps.find((rsvp) => rsvp.id === mine.guestId) || null : null;
-  };
+  const ownRsvp = () => state.rsvps.find((rsvp) => rsvp.isMine) || null;
 
   const headerBox = el('div', { class: 'event-header' });
   const shareBox = el('div');
@@ -186,7 +183,7 @@ function createEventPage(id, initialData, context, { isNew }) {
       'div',
       { class: 'host-tools' },
       el('span', { class: 'tag tag--host', text: 'Bu davet senin' }),
-      el('a', { class: 'button button--secondary', href: `/e/${id}/duzenle` }, 'Düzenle'),
+      el('a', { class: 'button button--secondary', href: `#/e/${id}/duzenle` }, 'Düzenle'),
       deleteButton,
       cancelButton,
     );
@@ -329,7 +326,6 @@ function createEventPage(id, initialData, context, { isNew }) {
       button.disabled = true;
       try {
         const result = await api.saveRsvp(id, { name: nameInput.value, status, note: noteInput.value });
-        if (result.guestToken) local.setRsvp(id, { guestId: result.rsvp.id, guestToken: result.guestToken });
         local.setName(result.rsvp.name);
         if (wallNameInput && !wallNameInput.value.trim()) wallNameInput.value = result.rsvp.name;
         local.rememberInvite(state.event, 'guest');
@@ -473,7 +469,6 @@ function createEventPage(id, initialData, context, { isNew }) {
           status: available.length ? 'maybe' : 'declined',
           available,
         });
-        if (result.guestToken) local.setRsvp(id, { guestId: result.rsvp.id, guestToken: result.guestToken });
         local.setName(result.rsvp.name);
         if (wallNameInput && !wallNameInput.value.trim()) wallNameInput.value = result.rsvp.name;
         local.rememberInvite(state.event, 'guest');
@@ -505,7 +500,6 @@ function createEventPage(id, initialData, context, { isNew }) {
   }
 
   function renderGuests() {
-    const mine = local.rsvp(id);
     const groups = state.event.pollOpen
       ? [{ title: `🗳️ Oy verenler`, people: state.rsvps }]
       : Object.keys(STATUS).map((status) => ({
@@ -536,7 +530,7 @@ function createEventPage(id, initialData, context, { isNew }) {
                       el(
                         'span',
                         { class: 'guest__text' },
-                        el('span', { class: 'guest__name' }, rsvp.name, mine?.guestId === rsvp.id && el('span', { class: 'muted', text: ' (sen)' })),
+                        el('span', { class: 'guest__name' }, rsvp.name, rsvp.isMine && el('span', { class: 'muted', text: ' (sen)' })),
                         rsvp.note && el('span', { class: 'guest__note', text: rsvp.note }),
                       ),
                     ),
@@ -554,7 +548,7 @@ function createEventPage(id, initialData, context, { isNew }) {
       comments.length === 0
         ? el('li', { class: 'muted wall__empty', text: 'Henüz kimse yazmadı. Bir “Ben varım!” bırak.' })
         : comments.map((comment) => {
-            const canDelete = state.isHost || Boolean(local.commentToken(comment.id));
+            const canDelete = state.isHost || comment.isMine;
             return el(
               'li',
               { class: 'post' },
@@ -622,8 +616,7 @@ function createEventPage(id, initialData, context, { isNew }) {
       }
       sendButton.disabled = true;
       try {
-        const { comment, commentToken } = await api.addComment(id, { name: nameInput.value, text: textInput.value });
-        local.setCommentToken(comment.id, commentToken);
+        const { comment } = await api.addComment(id, { name: nameInput.value, text: textInput.value });
         local.setName(comment.name);
         state = { ...state, comments: [...state.comments, comment] };
         textInput.value = '';
@@ -661,7 +654,7 @@ function createEventPage(id, initialData, context, { isNew }) {
 
   // Keep "Davetlerim" in sync with the latest title and time.
   if (state.isHost) local.rememberInvite(state.event, 'host');
-  else if (local.rsvp(id)) local.rememberInvite(state.event, 'guest');
+  else if (ownRsvp()) local.rememberInvite(state.event, 'guest');
 
   const node = el(
     'div',

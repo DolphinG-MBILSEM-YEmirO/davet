@@ -44,7 +44,7 @@ export function renderHome() {
           class: 'hero__lead',
           text: 'Doğum günü, halı saha, ders çalışma, film gecesi… Davetini oluştur, grubuna at; kimin geldiğini ve kimin "belki" dediğini tek yerde gör.',
         }),
-        el('div', { class: 'button-row' }, el('a', { class: 'button button--large', href: '/yeni' }, 'Davet oluştur')),
+        el('div', { class: 'button-row' }, el('a', { class: 'button button--large', href: '#/yeni' }, 'Davet oluştur')),
       ),
       el(
         'div',
@@ -125,7 +125,7 @@ export function renderHome() {
             {},
             el(
               'a',
-              { class: 'theme-chip', href: `/yeni?tema=${theme.id}` },
+              { class: 'theme-chip', href: `#/yeni?tema=${theme.id}` },
               el('span', { 'aria-hidden': 'true', text: theme.emoji }),
               theme.label,
             ),
@@ -143,7 +143,7 @@ function renderInviteItem(invite) {
     {},
     el(
       'a',
-      { class: 'invite-item', href: `/e/${invite.id}` },
+      { class: 'invite-item', href: `#/e/${invite.id}` },
       renderCover({ theme: invite.theme }, { size: 'tiny' }),
       el(
         'span',
