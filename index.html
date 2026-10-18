@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Davet · Planı yap, linki at</title>
+  <meta name="description" content="Davetini oluştur, linki WhatsApp grubuna at, kimin geldiğini tek yerde gör. Üyelik yok, uygulama yok.">
+  <meta property="og:title" content="Davet · Planı yap, linki at">
+  <meta property="og:description" content="Geliyor musun? Tek dokunuşla cevap ver, kimlerin geldiğini gör.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#fbf7f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#120f18" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%89%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="modulepreload" href="/js/main.js">
+  <link rel="modulepreload" href="/js/views/event.js">
+</head>
+<body>
+  <a class="skip-link" href="#app">İçeriğe geç</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/"><span class="brand__mark" aria-hidden="true">🎉</span>Davet</a>
+      <a class="button button--small" href="/yeni">Davet oluştur</a>
+    </div>
+  </header>
+
+  <main id="app" class="container" tabindex="-1"></main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Davet linkini bilen herkes daveti görebilir. Etkinlikten 60 gün sonra davet ve tüm cevaplar silinir.</p>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
