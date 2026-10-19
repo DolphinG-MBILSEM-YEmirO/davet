@@ -63,6 +63,28 @@ export function validateEventInput(body) {
   };
 }
 
+/**
+ * Extra fields on invites shared from Sharloop. They are never required and
+ * anything malformed is simply dropped, so a bad value can't hide the invite:
+ *   - allDay: no set time, only the date is shown;
+ *   - emoji: shown on the cover instead of the theme's;
+ *   - durationMinutes: used for the calendar file;
+ *   - sharloop: the host's Sharloop friend code and username.
+ */
+export function validateSharloopFields(body) {
+  const fields = {};
+  if (body?.allDay === true) fields.allDay = true;
+  if (typeof body?.emoji === 'string' && body.emoji.trim() && body.emoji.length <= 16) fields.emoji = body.emoji.trim();
+  const minutes = body?.durationMinutes;
+  if (Number.isInteger(minutes) && minutes > 0 && minutes <= 24 * 60 && !fields.allDay) fields.durationMinutes = minutes;
+  const sharloop = body?.sharloop;
+  if (sharloop && typeof sharloop === 'object' && /^[0-9A-Z]{8}$/.test(sharloop.kod)) {
+    const username = typeof sharloop.kullaniciAdi === 'string' && /^[a-z0-9_.]{3,20}$/.test(sharloop.kullaniciAdi);
+    fields.sharloop = { kod: sharloop.kod, ...(username ? { kullaniciAdi: sharloop.kullaniciAdi } : {}) };
+  }
+  return fields;
+}
+
 /** The option a host picks to close a poll. */
 export function validateFinalizeInput(body, event) {
   if (!event.pollOpen) throw new ValidationError(409, 'Bu davetin saati zaten belli.');

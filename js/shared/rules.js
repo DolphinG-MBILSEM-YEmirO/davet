@@ -30,6 +30,13 @@ export const LIMITS = {
   timeOptionsMax: 6,
 };
 
+/**
+ * Sharloop, the planning app Davet belongs to. Plans shared from it as links
+ * are Davet invites with a few extra fields (see validateSharloopFields).
+ * Its address is fixed here, never taken from an invite.
+ */
+export const SHARLOOP_URL = 'https://sharloop.vercel.app';
+
 /** Local wall-clock time "YYYY-MM-DDTHH:mm", as produced by <input type="datetime-local">. */
 export const DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 

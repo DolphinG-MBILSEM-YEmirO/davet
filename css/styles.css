@@ -1,5 +1,5 @@
-/* Davet (part of CepDost): playful, mobile-first styles. Plain CSS, no build step.
-   Colors follow CepDost's coral and cream palette (brand coral #FF5A3C). */
+/* Davet (part of Sharloop, formerly CepDost): playful, mobile-first styles. Plain CSS,
+   no build step. Colors keep CepDost's coral and cream palette (brand coral #FF5A3C). */
 
 /* ---------- Tokens ---------- */
 
@@ -1145,7 +1145,20 @@ textarea:focus {
   transform: translate(-50%, 0);
 }
 
-/* ---------- CepDost link ---------- */
+/* ---------- Sharloop link ---------- */
+
+.sharloop {
+  background: linear-gradient(135deg, var(--primary-soft), var(--surface) 70%);
+}
+
+.sharloop h2 {
+  margin-top: 0;
+}
+
+.sharloop__hint {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+}
 
 .brand__family {
   margin-left: 2px;

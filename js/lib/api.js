@@ -31,6 +31,7 @@ import {
   validateEventInput,
   validateFinalizeInput,
   validateRsvpInput,
+  validateSharloopFields,
 } from '../shared/validate.js';
 import { DATETIME_PATTERN, LIMITS } from '../shared/rules.js';
 
@@ -146,14 +147,17 @@ function newestByAuthorAndTag(events) {
 
 const isoFromSeconds = (seconds) => new Date(seconds * 1000).toISOString();
 
-/** Validate the stored invite. A closed poll keeps its options so votes still count. */
+/**
+ * Validate the stored invite. A closed poll keeps its options so votes still
+ * count. Invites shared from Sharloop keep their extra fields.
+ */
 function cleanInvite(data) {
   const pollOpen = data.pollOpen === true;
   const details = validateEventInput(pollOpen ? data : { ...data, timeOptions: [] });
   const timeOptions = pollOpen
     ? details.timeOptions
     : (Array.isArray(data.timeOptions) ? data.timeOptions : []).filter((option) => DATETIME_PATTERN.test(option));
-  return { ...details, timeOptions, pollOpen };
+  return { ...details, timeOptions, pollOpen, ...validateSharloopFields(data) };
 }
 
 /** Read and validate every event of an invite. Throws 404 if there is no invite. */

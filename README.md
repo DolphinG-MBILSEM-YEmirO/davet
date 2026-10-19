@@ -1,7 +1,7 @@
-# Davet (by CepDost)
+# Davet (by Sharloop)
 
 Create an invite, share the link in your group chat, see who's coming.
-Part of the [CepDost](https://cepdost.vercel.app) family and uses its coral/cream palette.
+Part of the [Sharloop](https://sharloop.vercel.app) family (formerly CepDost) and keeps CepDost's coral/cream palette.
 
 There is no server and no database to pay for. The site is static (GitHub Pages),
 and invites, answers and wall posts are stored encrypted on free public
@@ -17,6 +17,22 @@ and invites, answers and wall posts are stored encrypted on free public
 - The host can edit or delete the invite.
 - "Davetlerim" on the home page lists invites this browser hosts or answered.
 - Light and dark themes, mobile-first, keyboard and screen-reader friendly.
+
+## Plans from Sharloop
+
+When someone shares a plan from Sharloop as a link, Sharloop publishes it as a Davet invite, signed with the
+host's Sharloop account, so people without the app open it here and answer as with any invite. Sharloop reads
+the same events to show the host who's coming.
+
+Such invites carry a few optional fields (`validateSharloopFields` in `js/shared/validate.js`):
+
+- `allDay`: the plan has no set time, so only the date is shown and the calendar file is a whole-day event;
+- `emoji`: shown on the cover instead of the theme's emoji;
+- `durationMinutes`: the length of the calendar event;
+- `sharloop`: the host's Sharloop friend code and username. The page then shows "Sharloop'ta aç"
+  (opens `https://sharloop.vercel.app/#davet=<link id>`, where a "coming" also goes into the calendar) and
+  "Sharloop'a katıl" (`?ekle=<code>`, which finds the host to add as a friend). The Sharloop address is fixed
+  in `js/shared/rules.js`, never read from an invite.
 
 ## How data works
 

@@ -5,8 +5,8 @@ import { el, mount, downloadText } from '../lib/dom.js';
 import { api } from '../lib/api.js';
 import { local } from '../lib/local.js';
 import { buildEventIcs } from '../lib/ics.js';
-import { countdown, formatDay, formatTime, timeAgo } from '../lib/format.js';
-import { LIMITS } from '../shared/rules.js';
+import { countdown, formatDay, formatTime, formatWhen, timeAgo } from '../lib/format.js';
+import { LIMITS, SHARLOOP_URL } from '../shared/rules.js';
 import { renderCover } from './components/cover.js';
 import { renderAvatar } from './components/avatar.js';
 import { showToast } from './components/toast.js';
@@ -77,12 +77,14 @@ function createEventPage(id, initialData, context, { isNew }) {
   const shareUrl = `${window.location.href.split('#')[0]}#/e/${id}`;
 
   const ownRsvp = () => state.rsvps.find((rsvp) => rsvp.isMine) || null;
+  const isOver = () => countdown(state.event.startsAt, new Date(), { allDay: state.event.allDay });
 
   const headerBox = el('div', { class: 'event-header' });
   const shareBox = el('div');
   const countsBox = el('p', { class: 'event-counts', 'aria-live': 'polite' });
   const rsvpBox = el('section', { class: 'panel rsvp', 'aria-labelledby': 'rsvp-heading' });
   const guestsBox = el('section', { class: 'panel', 'aria-labelledby': 'guests-heading' });
+  const sharloopBox = el('div');
   const wallList = el('ul', { class: 'wall__list' });
 
   let editingRsvp = false;
@@ -91,10 +93,8 @@ function createEventPage(id, initialData, context, { isNew }) {
 
   function renderHeader() {
     const { event, isHost } = state;
-    const { label, past } = event.pollOpen ? { label: '🗳️ Saat oylanıyor', past: false } : countdown(event.startsAt);
-    const when = event.pollOpen
-      ? `Saat oylanıyor · ${event.timeOptions.length} seçenek`
-      : `${formatDay(event.startsAt)} · ${formatTime(event.startsAt)}`;
+    const { label, past } = event.pollOpen ? { label: '🗳️ Saat oylanıyor', past: false } : isOver();
+    const when = event.pollOpen ? `Saat oylanıyor · ${event.timeOptions.length} seçenek` : formatWhen(event);
     context.setTitle(event.title);
 
     mount(
@@ -193,7 +193,7 @@ function createEventPage(id, initialData, context, { isNew }) {
     const { event } = state;
     const message = event.pollOpen
       ? `${event.title}\nHangi saat uyar? Oyla 👉 ${shareUrl}`
-      : `${event.title} · ${formatDay(event.startsAt)} ${formatTime(event.startsAt)}\nGeliyor musun? 👉 ${shareUrl}`;
+      : `${event.title} · ${formatWhen(event)}\nGeliyor musun? 👉 ${shareUrl}`;
     const buttons = [
       el(
         'a',
@@ -265,7 +265,7 @@ function createEventPage(id, initialData, context, { isNew }) {
       return;
     }
     const mine = ownRsvp();
-    const past = countdown(state.event.startsAt).past;
+    const { past } = isOver();
     const heading = el('h2', { id: 'rsvp-heading', text: past ? 'Bu plan bitti' : 'Geliyor musun?' });
 
     if (past) {
@@ -499,6 +499,43 @@ function createEventPage(id, initialData, context, { isNew }) {
     );
   }
 
+  /**
+   * Plans shared from Sharloop: people with the app can open the plan there
+   * (a "coming" also goes into their calendar), the rest can join and add
+   * the host as a friend. Answering here works either way.
+   */
+  function renderSharloop() {
+    const { event } = state;
+    if (!event.sharloop) {
+      mount(sharloopBox);
+      return;
+    }
+    mount(
+      sharloopBox,
+      el(
+        'section',
+        { class: 'panel sharloop', 'aria-labelledby': 'sharloop-heading' },
+        el('h2', { id: 'sharloop-heading', text: 'Bu plan Sharloop’tan' }),
+        el('p', {
+          class: 'muted',
+          text: `${event.hostName} bu planı Sharloop’ta kurdu. Uygulaman varsa planı orada aç; “Geliyorum” dersen takvimine de eklenir. Yoksa buradan cevap vermen yeterli.`,
+        }),
+        el(
+          'div',
+          { class: 'button-row' },
+          el('a', { class: 'button', href: `${SHARLOOP_URL}/#davet=${id}`, rel: 'noopener' }, 'Sharloop’ta aç'),
+          el(
+            'a',
+            { class: 'button button--secondary', href: `${SHARLOOP_URL}/?ekle=${event.sharloop.kod}`, rel: 'noopener' },
+            'Sharloop’a katıl',
+          ),
+        ),
+        event.sharloop.kullaniciAdi &&
+          el('p', { class: 'sharloop__hint muted', text: `Sharloop’ta @${event.sharloop.kullaniciAdi} olarak bulabilirsin.` }),
+      ),
+    );
+  }
+
   function renderGuests() {
     const groups = state.event.pollOpen
       ? [{ title: `🗳️ Oy verenler`, people: state.rsvps }]
@@ -649,6 +686,7 @@ function createEventPage(id, initialData, context, { isNew }) {
   renderHeader();
   renderCounts();
   renderRsvp();
+  renderSharloop();
   renderGuests();
   renderWallList();
 
@@ -660,7 +698,7 @@ function createEventPage(id, initialData, context, { isNew }) {
     'div',
     { class: 'event-layout' },
     el('div', { class: 'event-layout__main' }, headerBox, shareBox),
-    el('div', { class: 'event-layout__side' }, rsvpBox, guestsBox, renderWall()),
+    el('div', { class: 'event-layout__side' }, rsvpBox, sharloopBox, guestsBox, renderWall()),
   );
 
   return {
@@ -669,7 +707,10 @@ function createEventPage(id, initialData, context, { isNew }) {
       const detailsChanged = data.event.updatedAt !== state.event.updatedAt;
       const pollClosed = state.event.pollOpen && !data.event.pollOpen;
       state = data;
-      if (detailsChanged) renderHeader();
+      if (detailsChanged) {
+        renderHeader();
+        renderSharloop();
+      }
       renderCounts();
       if (pollClosed || (!editingRsvp && !rsvpBox.contains(document.activeElement))) renderRsvp();
       renderGuests();

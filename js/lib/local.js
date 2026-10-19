@@ -43,6 +43,8 @@ export const local = {
         title: event.title,
         startsAt: event.startsAt,
         theme: event.theme,
+        emoji: event.emoji || null,
+        allDay: Boolean(event.allDay),
         pollOpen: Boolean(event.pollOpen),
         // Hosting outranks being a guest, even if the host also RSVPs.
         role: previous?.role === 'host' ? 'host' : role,

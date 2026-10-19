@@ -11,7 +11,8 @@ export function coverStyle(themeId) {
 }
 
 /**
- * @param {{ title?: string, theme?: string, startsAt?: string }} event
+ * @param {{ title?: string, theme?: string, startsAt?: string, emoji?: string }} event
+ *   `emoji` (plans from Sharloop) replaces the theme's emoji.
  * @param {{ size?: 'large' | 'small' | 'tiny', titleTag?: string }} [options]
  *   Tiny covers (list thumbnails) show only the emoji.
  */
@@ -23,7 +24,7 @@ export function renderCover(event, { size = 'large', titleTag = 'h1' } = {}) {
   return el(
     'div',
     { class: `cover cover--${size}`, style: coverStyle(theme.id) },
-    el('span', { class: 'cover__emoji', 'aria-hidden': 'true', text: theme.emoji }),
+    el('span', { class: 'cover__emoji', 'aria-hidden': 'true', text: event.emoji || theme.emoji }),
     chip &&
       el(
         'span',

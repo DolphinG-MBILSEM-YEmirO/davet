@@ -114,3 +114,93 @@ test('an invite signed by anyone but the host is ignored', async () => {
   const data = await api.getEvent(id);
   assert.equal(data.event.title, 'Cuma film gecesi');
 });
+
+/** Publish a raw event straight to the relay, the way another app would. */
+async function publishRaw(event) {
+  const socket = new WebSocket(`ws://localhost:${relay.port}`);
+  await new Promise((resolve) => socket.addEventListener('open', resolve));
+  socket.send(JSON.stringify(['EVENT', event]));
+  await new Promise((resolve) => socket.addEventListener('message', resolve));
+  socket.close();
+}
+
+test('plans shared from Sharloop keep their extra fields and take answers', async () => {
+  const { toBase64Url, randomBytes, fromHex } = await import('../js/lib/crypto.js');
+  const { buildEventIcs } = await import('../js/lib/ics.js');
+  // Sharloop signs the invite with the host's account key, which is in the link.
+  const account = nostr.generateSecretKey();
+  const secret = randomBytes(16);
+  const id = `${toBase64Url(secret)}.${toBase64Url(fromHex(nostr.getPublicKey(account)))}`;
+  const { topic, aesKey } = await inviteKeys(secret);
+  const invite = {
+    title: 'Belgrad Ormanı yürüyüşü',
+    startsAt: '2030-06-01T00:00',
+    timeOptions: [],
+    pollOpen: false,
+    location: 'Bahçeköy girişi',
+    description: '',
+    hostName: 'Deniz Kaya',
+    theme: 'outdoor',
+    hiddenComments: [],
+    allDay: true,
+    emoji: '🥾',
+    durationMinutes: null,
+    sharloop: { kod: '7K2M9QXA', kullaniciAdi: 'deniz' },
+  };
+  await publishRaw(
+    nostr.finalizeEvent(
+      { kind: 30078, created_at: Math.floor(Date.now() / 1000), tags: [['d', topic], ['i', topic]], content: await encryptJson(aesKey, invite) },
+      account,
+    ),
+  );
+
+  let data = await api.getEvent(id);
+  assert.equal(data.isHost, false);
+  assert.equal(data.event.allDay, true);
+  assert.equal(data.event.emoji, '🥾');
+  assert.deepEqual(data.event.sharloop, { kod: '7K2M9QXA', kullaniciAdi: 'deniz' });
+  assert.equal(data.event.durationMinutes, undefined);
+  const ics = buildEventIcs(data.event, 'https://example.com');
+  assert.match(ics, /DTSTART;VALUE=DATE:20300601\r\nDTEND;VALUE=DATE:20300602/);
+
+  // A guest answers here; Sharloop reads the same answer.
+  await api.saveRsvp(id, { name: 'Zeynep', status: 'going' });
+  data = await api.getEvent(id);
+  assert.deepEqual(data.rsvps.map((rsvp) => [rsvp.name, rsvp.status]), [['Zeynep', 'going']]);
+
+  // Malformed extras are dropped; the invite itself still shows.
+  await publishRaw(
+    nostr.finalizeEvent(
+      {
+        kind: 30078,
+        created_at: Math.floor(Date.now() / 1000) + 5,
+        tags: [['d', topic], ['i', topic]],
+        content: await encryptJson(aesKey, {
+          ...invite,
+          allDay: 'yes',
+          emoji: 'x'.repeat(40),
+          durationMinutes: 90,
+          sharloop: { kod: 'javascript:alert(1)', kullaniciAdi: '<b>' },
+        }),
+      },
+      account,
+    ),
+  );
+  data = await api.getEvent(id);
+  assert.equal(data.event.title, 'Belgrad Ormanı yürüyüşü');
+  assert.equal(data.event.allDay, undefined);
+  assert.equal(data.event.emoji, undefined);
+  assert.equal(data.event.durationMinutes, 90);
+  assert.equal(data.event.sharloop, undefined);
+  assert.match(buildEventIcs(data.event, 'https://example.com'), /DTSTART:20300601T000000\r\nDTEND:20300601T013000/);
+});
+
+test('an all-day plan counts as today for the whole day', async () => {
+  const { countdown, formatWhen } = await import('../js/lib/format.js');
+  const evening = new Date(2030, 5, 1, 21, 0);
+  assert.deepEqual(countdown('2030-06-01T00:00', evening, { allDay: true }), { label: 'Bugün', past: false });
+  assert.equal(countdown('2030-06-01T00:00', evening).past, true);
+  assert.equal(countdown('2030-06-01T00:00', new Date(2030, 5, 2, 9, 0), { allDay: true }).past, true);
+  assert.doesNotMatch(formatWhen({ startsAt: '2030-06-01T00:00', allDay: true }), /00:00/);
+  assert.match(formatWhen({ startsAt: '2030-06-01T00:00', allDay: true }), /Tüm gün$/);
+});
