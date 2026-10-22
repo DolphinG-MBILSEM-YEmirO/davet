@@ -2,7 +2,7 @@
 
 import { el } from '../lib/dom.js';
 import { local } from '../lib/local.js';
-import { countdown, formatDay, formatTime, isPast } from '../lib/format.js';
+import { countdown, formatDay, formatWhen, isPast } from '../lib/format.js';
 import { THEMES } from '../shared/rules.js';
 import { renderCover } from './components/cover.js';
 
@@ -16,7 +16,7 @@ const SAMPLE_INVITE = {
 const STEPS = [
   { emoji: '✍️', title: 'Daveti oluştur', text: 'Ne, nerede, ne zaman? Saat belli değilse seçenek ekle, arkadaşların oylasın.' },
   { emoji: '💬', title: 'Linki gruba at', text: 'WhatsApp, Instagram ya da Discord. Kimsenin uygulama indirmesi gerekmez.' },
-  { emoji: '🙋', title: 'Kim geliyor gör', text: 'Herkes tek dokunuşla cevap verir, duvara yazar. Sayım sende.' },
+  { emoji: '🙋', title: 'Kim geliyor gör', text: 'Herkes tek dokunuşla cevap verir. Sayım sende; sohbet ve gruplar Sharloop’ta.' },
 ];
 
 function nextFridayEvening() {
@@ -28,8 +28,9 @@ function nextFridayEvening() {
 
 export function renderHome() {
   const invites = local.invites();
-  const upcoming = invites.filter((invite) => !isPast(invite.startsAt));
-  const past = invites.filter((invite) => isPast(invite.startsAt));
+  const isOver = (invite) => isPast(invite.startsAt, new Date(), { allDay: invite.allDay });
+  const upcoming = invites.filter((invite) => !isOver(invite));
+  const past = invites.filter(isOver);
 
   return [
     el(
@@ -137,21 +138,23 @@ export function renderHome() {
 }
 
 function renderInviteItem(invite) {
-  const { label, past } = invite.pollOpen ? { label: 'Saat oylanıyor', past: false } : countdown(invite.startsAt);
+  const { label, past } = invite.pollOpen
+    ? { label: 'Saat oylanıyor', past: false }
+    : countdown(invite.startsAt, new Date(), { allDay: invite.allDay });
   return el(
     'li',
     {},
     el(
       'a',
       { class: 'invite-item', href: `#/e/${invite.id}` },
-      renderCover({ theme: invite.theme }, { size: 'tiny' }),
+      renderCover({ theme: invite.theme, emoji: invite.emoji }, { size: 'tiny' }),
       el(
         'span',
         { class: 'invite-item__text' },
         el('span', { class: 'invite-item__title', text: invite.title }),
         el('span', {
           class: 'muted',
-          text: invite.pollOpen ? 'Herkese uyan saat seçiliyor' : `${formatDay(invite.startsAt)} · ${formatTime(invite.startsAt)}`,
+          text: invite.pollOpen ? 'Herkese uyan saat seçiliyor' : formatWhen(invite),
         }),
       ),
       el(

@@ -1,6 +1,7 @@
-// Data layer with no server of our own. Invites, RSVPs and wall posts are
-// stored as encrypted, signed Nostr events (kind 30078, "application data")
-// on free public relays; see relays.js and crypto.js.
+// Data layer with no server of our own. Invites and RSVPs are stored as
+// encrypted, signed Nostr events (kind 30078, "application data") on free
+// public relays; see relays.js and crypto.js. (Davet has no messages: chats
+// and groups are Sharloop's.)
 //
 // Who may change what is enforced with signatures instead of a server:
 //   - the invite is signed by a key created for it; its public half is part
@@ -12,6 +13,7 @@
 
 import { local } from './local.js';
 import { loadNostr } from './nostr.js';
+import { notifyHost } from './notify.js';
 import { RelayPool, configuredRelays } from './relays.js';
 import {
   decryptJson,
@@ -21,16 +23,15 @@ import {
   fromHex,
   inviteKeys,
   randomBytes,
-  randomId,
   toBase64Url,
   toHex,
 } from './crypto.js';
 import {
   ValidationError,
-  validateCommentInput,
   validateEventInput,
   validateFinalizeInput,
   validateRsvpInput,
+  validateSharloopFields,
 } from '../shared/validate.js';
 import { DATETIME_PATTERN, LIMITS } from '../shared/rules.js';
 
@@ -146,14 +147,17 @@ function newestByAuthorAndTag(events) {
 
 const isoFromSeconds = (seconds) => new Date(seconds * 1000).toISOString();
 
-/** Validate the stored invite. A closed poll keeps its options so votes still count. */
+/**
+ * Validate the stored invite. A closed poll keeps its options so votes still
+ * count. Invites shared from Sharloop keep their extra fields.
+ */
 function cleanInvite(data) {
   const pollOpen = data.pollOpen === true;
   const details = validateEventInput(pollOpen ? data : { ...data, timeOptions: [] });
   const timeOptions = pollOpen
     ? details.timeOptions
     : (Array.isArray(data.timeOptions) ? data.timeOptions : []).filter((option) => DATETIME_PATTERN.test(option));
-  return { ...details, timeOptions, pollOpen };
+  return { ...details, timeOptions, pollOpen, ...validateSharloopFields(data) };
 }
 
 /** Read and validate every event of an invite. Throws 404 if there is no invite. */
@@ -178,7 +182,6 @@ async function readInvite(invite) {
     throw new ApiError(404, 'Davet okunamadı.');
   }
   event.updatedAt = String(inviteItem.raw.created_at);
-  const hidden = new Set(Array.isArray(inviteItem.data.hiddenComments) ? inviteItem.data.hiddenComments : []);
 
   const rsvps = items
     .filter(({ raw }) => raw.dTag === `${invite.topic}:rsvp`)
@@ -204,29 +207,7 @@ async function readInvite(invite) {
     })
     .slice(0, LIMITS.rsvpsPerEvent);
 
-  const commentPrefix = `${invite.topic}:c:`;
-  const comments = items
-    .filter(({ raw }) => raw.dTag.startsWith(commentPrefix))
-    .flatMap(({ raw, data }) => {
-      const id = raw.dTag.slice(commentPrefix.length);
-      if (data.deleted || hidden.has(id)) return [];
-      try {
-        return [
-          {
-            id,
-            ...validateCommentInput(data),
-            createdAt: isoFromSeconds(raw.created_at),
-            isMine: raw.pubkey === invite.personalPubkey,
-          },
-        ];
-      } catch {
-        return [];
-      }
-    })
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    .slice(0, LIMITS.commentsPerEvent);
-
-  return { event, rsvps, comments, inviteData: inviteItem.data };
+  return { event, rsvps, inviteData: inviteItem.data };
 }
 
 /** Turn validation and unexpected errors into ApiErrors with readable messages. */
@@ -257,15 +238,15 @@ export const api = {
       const hostKey = nostr.generateSecretKey();
       const id = `${toBase64Url(randomBytes(16))}.${toBase64Url(fromHex(nostr.getPublicKey(hostKey)))}`;
       local.setHostToken(id, toHex(hostKey));
-      await publishInvite(await openInvite(id), { ...clean, hiddenComments: [] });
+      await publishInvite(await openInvite(id), clean);
       return { id, hostToken: toHex(hostKey) };
     }),
 
   getEvent: (id) =>
     guard(async () => {
       const invite = await openInvite(id);
-      const { event, rsvps, comments } = await readInvite(invite);
-      return { event: { id, ...event }, rsvps, comments, isHost: Boolean(invite.hostKey) };
+      const { event, rsvps } = await readInvite(invite);
+      return { event: { id, ...event }, rsvps, isHost: Boolean(invite.hostKey) };
     }),
 
   updateEvent: (id, input) =>
@@ -299,33 +280,9 @@ export const api = {
       const { event } = await readInvite(invite);
       const clean = validateRsvpInput(input, event);
       await publish(invite, invite.personalKey, `${invite.topic}:rsvp`, clean, expirationFor(event));
+      // A plan from Sharloop: its host hears about it on their phone.
+      void notifyHost({ invite, pool: relayPool(), secret: String(id).split('.')[0], event, rsvp: clean });
       const rsvp = { id: invite.personalPubkey.slice(0, 16), ...clean, createdAt: new Date().toISOString(), isMine: true };
       return { rsvp };
-    }),
-
-  addComment: (id, input) =>
-    guard(async () => {
-      const invite = await openInvite(id);
-      const { event, comments } = await readInvite(invite);
-      if (comments.length >= LIMITS.commentsPerEvent) throw new ApiError(409, 'Bu davetin duvarı doldu.');
-      const clean = validateCommentInput(input);
-      const commentId = randomId();
-      await publish(invite, invite.personalKey, `${invite.topic}:c:${commentId}`, clean, expirationFor(event));
-      return { comment: { id: commentId, ...clean, createdAt: new Date().toISOString(), isMine: true } };
-    }),
-
-  /** Authors delete their own posts; the host can hide anyone's post. */
-  deleteComment: (id, commentId) =>
-    guard(async () => {
-      const invite = await openInvite(id);
-      const { event, comments, inviteData } = await readInvite(invite);
-      const comment = comments.find((item) => item.id === commentId);
-      if (!comment) throw new ApiError(404, 'Mesaj bulunamadı.');
-      if (comment.isMine) {
-        await publish(invite, invite.personalKey, `${invite.topic}:c:${commentId}`, { deleted: true }, expirationFor(event));
-      } else {
-        const hiddenComments = [...new Set([...(inviteData.hiddenComments || []), commentId])];
-        await publishInvite(invite, { ...inviteData, hiddenComments });
-      }
     }),
 };

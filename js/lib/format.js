@@ -20,6 +20,11 @@ export function formatTime(value) {
   return parseLocalDateTime(value).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
 }
 
+/** "Cumartesi, 10 Mayıs · 20:30", or "Cumartesi, 10 Mayıs · Tüm gün". */
+export function formatWhen(event) {
+  return `${formatDay(event.startsAt)} · ${event.allDay ? 'Tüm gün' : formatTime(event.startsAt)}`;
+}
+
 /** Short calendar chip parts: { month: "MAY", day: "10" } */
 export function dateChip(value) {
   const date = parseLocalDateTime(value);
@@ -29,31 +34,24 @@ export function dateChip(value) {
   };
 }
 
-/** Friendly countdown: "Bugün", "Yarın", "3 gün kaldı", "Bitti". */
-export function countdown(value, now = new Date()) {
+/**
+ * Friendly countdown: "Bugün", "Yarın", "3 gün kaldı", "Bitti".
+ * An all-day plan is "Bugün" for the whole day.
+ */
+export function countdown(value, now = new Date(), { allDay = false } = {}) {
   const start = parseLocalDateTime(value);
   const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const days = Math.round((startDay - today) / 86400000);
 
-  if (days < 0 || (days === 0 && start < now - 6 * 3600000)) return { label: 'Bitti', past: true };
-  if (days === 0) return { label: start <= now ? 'Şu an' : 'Bugün', past: false };
+  if (days < 0 || (days === 0 && !allDay && start < now - 6 * 3600000)) return { label: 'Bitti', past: true };
+  if (days === 0) return { label: start <= now && !allDay ? 'Şu an' : 'Bugün', past: false };
   if (days === 1) return { label: 'Yarın', past: false };
   return { label: `${days} gün kaldı`, past: false };
 }
 
-export function isPast(value, now = new Date()) {
-  return countdown(value, now).past;
-}
-
-/** "2 dk önce", "3 sa önce", "dün", or a date. */
-export function timeAgo(isoString, now = new Date()) {
-  const seconds = Math.max(0, Math.round((now - new Date(isoString)) / 1000));
-  if (seconds < 60) return 'az önce';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} dk önce`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} sa önce`;
-  if (seconds < 172800) return 'dün';
-  return new Date(isoString).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
+export function isPast(value, now = new Date(), options = {}) {
+  return countdown(value, now, options).past;
 }
 
 export function initials(name) {

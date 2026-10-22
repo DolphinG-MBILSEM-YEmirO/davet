@@ -34,8 +34,6 @@ export function fromHex(hex) {
   return Uint8Array.from(hex.match(/../g) || [], (pair) => parseInt(pair, 16));
 }
 
-export const randomId = (bytes = 9) => toBase64Url(randomBytes(bytes));
-
 async function hmac(keyBytes, message) {
   const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(message)));

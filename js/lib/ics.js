@@ -6,18 +6,29 @@ const DEFAULT_DURATION_HOURS = 2;
 
 const pad = (number) => String(number).padStart(2, '0');
 
+const icsDate = (date) => `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+
 /** Floating local time (no timezone), which calendars show as wall-clock time. */
 function icsDateTime(date) {
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}00`;
+  return `${icsDate(date)}T${pad(date.getHours())}${pad(date.getMinutes())}00`;
 }
 
 function escapeText(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 }
 
-export function buildEventIcs(event, url) {
+/** Start and end lines: whole days for an all-day plan, otherwise times. */
+function icsTimes(event) {
   const start = parseLocalDateTime(event.startsAt);
-  const end = new Date(start.getTime() + DEFAULT_DURATION_HOURS * 3600000);
+  if (event.allDay) {
+    const nextDay = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+    return [`DTSTART;VALUE=DATE:${icsDate(start)}`, `DTEND;VALUE=DATE:${icsDate(nextDay)}`];
+  }
+  const minutes = event.durationMinutes || DEFAULT_DURATION_HOURS * 60;
+  return [`DTSTART:${icsDateTime(start)}`, `DTEND:${icsDateTime(new Date(start.getTime() + minutes * 60000))}`];
+}
+
+export function buildEventIcs(event, url) {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const description = [event.description, url].filter(Boolean).join('\n\n');
 
@@ -29,8 +40,7 @@ export function buildEventIcs(event, url) {
     'BEGIN:VEVENT',
     `UID:${event.id}@davet`,
     `DTSTAMP:${stamp}`,
-    `DTSTART:${icsDateTime(start)}`,
-    `DTEND:${icsDateTime(end)}`,
+    ...icsTimes(event),
     `SUMMARY:${escapeText(event.title)}`,
     event.location ? `LOCATION:${escapeText(event.location)}` : null,
     `DESCRIPTION:${escapeText(description)}`,
