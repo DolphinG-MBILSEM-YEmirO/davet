@@ -22,9 +22,7 @@ export const LIMITS = {
   description: 1000,
   name: 40,
   note: 140,
-  comment: 500,
   rsvpsPerEvent: 300,
-  commentsPerEvent: 500,
   // "Ortak saat" polls: the host offers this many time options.
   timeOptionsMin: 2,
   timeOptionsMax: 6,

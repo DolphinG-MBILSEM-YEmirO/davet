@@ -54,16 +54,6 @@ export function isPast(value, now = new Date(), options = {}) {
   return countdown(value, now, options).past;
 }
 
-/** "2 dk önce", "3 sa önce", "dün", or a date. */
-export function timeAgo(isoString, now = new Date()) {
-  const seconds = Math.max(0, Math.round((now - new Date(isoString)) / 1000));
-  if (seconds < 60) return 'az önce';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} dk önce`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} sa önce`;
-  if (seconds < 172800) return 'dün';
-  return new Date(isoString).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
-}
-
 export function initials(name) {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);
   const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] || '?').slice(0, 2);

@@ -4,8 +4,9 @@ Create an invite, share the link in your group chat, see who's coming.
 Part of the [Sharloop](https://sharloop.vercel.app) family (formerly CepDost) and keeps CepDost's coral/cream palette.
 
 There is no server and no database to pay for. The site is static (GitHub Pages),
-and invites, answers and wall posts are stored encrypted on free public
-[Nostr](https://nostr.com) relays.
+and invites and answers are stored encrypted on free public
+[Nostr](https://nostr.com) relays. Davet has no chat: messages and groups are Sharloop's,
+and every invite page points there.
 
 ## Features
 
@@ -13,7 +14,8 @@ and invites, answers and wall posts are stored encrypted on free public
 - "Ortak saat" polls: if the time isn't fixed, the host offers 2–6 options. Guests tick the ones that suit them and the best option is highlighted. When the host picks one, everyone who voted for it counts as "going".
 - Share links: WhatsApp, copy link, native share sheet and an `.ics` "add to calendar" file.
 - One-tap RSVP (Geliyorum / Belki / Gelemem) with an optional note, changeable later.
-- A guest list and a wall. Authors can delete their own posts and the host can hide any post.
+- A guest list.
+- A Sharloop panel on every invite: chats, groups and the next plan happen in Sharloop.
 - The host can edit or delete the invite.
 - "Davetlerim" on the home page lists invites this browser hosts or answered.
 - Light and dark themes, mobile-first, keyboard and screen-reader friendly.
@@ -34,6 +36,12 @@ Such invites carry a few optional fields (`validateSharloopFields` in `js/shared
   "Sharloop'a katıl" (`?ekle=<code>`, which finds the host to add as a friend). The Sharloop address is fixed
   in `js/shared/rules.js`, never read from an invite.
 
+An answer given here also reaches the host's phone as a notification (`js/lib/notify.js`), all from the
+guest's browser: it finds the host's devices in Sharloop's directory entry for the friend code, signs a short
+payload with the guest's key for the invite, encrypts it per device (RFC 8291) and posts the ciphertext to
+Sharloop's `/api/bildir`, which forwards it. The host's phone shows the guest's words because the payload
+names the invite's secret. If anything fails, the answer is still saved.
+
 ## How data works
 
 - **Link:** `#/e/<secret>.<host public key>`. Browsers never send the `#` part to any server.
@@ -42,7 +50,7 @@ Such invites carry a few optional fields (`validateSharloopFields` in `js/shared
   - an AES-GCM key that encrypts every event, so relays only store ciphertext.
 - **Signing:** every write is a signed Nostr event of kind 30078 (application data, NIP-78).
   - The invite is signed by a key made for it. Its public half is in the link, so only the host can change it.
-  - Each guest signs their RSVP and posts with a key derived from a random seed in their browser, one key per invite. Only they can replace them.
+  - Each guest signs their RSVP with a key derived from a random seed in their browser, one key per invite. Only they can replace it.
 - **Untrusted reads:** relays are untrusted, so every event is verified, decrypted and validated with the same rules used when writing (`js/shared/validate.js`).
 - **Expiry:** events carry a NIP-40 expiration 60 days after the event date.
 - **Redundancy:** data is written to several relays (`js/lib/relays.js`), so one relay going down doesn't lose it.
@@ -55,7 +63,8 @@ index.html              App shell
 css/styles.css          All styles (design tokens at the top)
 js/main.js              Hash router
 js/shared/              Themes, limits and validation
-js/lib/api.js           Data layer: invites, RSVPs, wall over Nostr
+js/lib/api.js           Data layer: invites and RSVPs over Nostr
+js/lib/notify.js        Notifies a Sharloop host's phone about answers
 js/lib/relays.js        Minimal relay pool (publish, query)
 js/lib/crypto.js        Keys, encryption, encoding (WebCrypto)
 js/lib/nostr.js         Loads nostr-tools (pinned) from a CDN
@@ -83,5 +92,5 @@ GitHub Pages: Settings → Pages → Deploy from branch → `main` / root. The s
 
 ## Limits
 
-300 RSVPs and 500 wall posts per invite. Public relays are free and run by the community: they
+300 RSVPs per invite. Public relays are free and run by the community: they
 may rate-limit or drop data, which is why every write goes to several of them.

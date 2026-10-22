@@ -109,10 +109,3 @@ export function validateRsvpInput(body, event) {
     ...(event.pollOpen ? { available } : {}),
   };
 }
-
-export function validateCommentInput(body) {
-  return {
-    name: line(body?.name, { field: 'Adın', max: LIMITS.name, required: true }),
-    text: text(body?.text, { field: 'Mesaj', max: LIMITS.comment, required: true }),
-  };
-}

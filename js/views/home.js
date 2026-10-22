@@ -16,7 +16,7 @@ const SAMPLE_INVITE = {
 const STEPS = [
   { emoji: '✍️', title: 'Daveti oluştur', text: 'Ne, nerede, ne zaman? Saat belli değilse seçenek ekle, arkadaşların oylasın.' },
   { emoji: '💬', title: 'Linki gruba at', text: 'WhatsApp, Instagram ya da Discord. Kimsenin uygulama indirmesi gerekmez.' },
-  { emoji: '🙋', title: 'Kim geliyor gör', text: 'Herkes tek dokunuşla cevap verir, duvara yazar. Sayım sende.' },
+  { emoji: '🙋', title: 'Kim geliyor gör', text: 'Herkes tek dokunuşla cevap verir. Sayım sende; sohbet ve gruplar Sharloop’ta.' },
 ];
 
 function nextFridayEvening() {

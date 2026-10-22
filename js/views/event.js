@@ -1,11 +1,12 @@
-// Invite page: details, one-tap RSVP, guest list, the wall and sharing.
+// Invite page: details, one-tap RSVP, guest list and sharing. Messages and
+// groups live in Sharloop, which the page points to.
 // Refreshes in the background so new answers show up without reloading.
 
 import { el, mount, downloadText } from '../lib/dom.js';
 import { api } from '../lib/api.js';
 import { local } from '../lib/local.js';
 import { buildEventIcs } from '../lib/ics.js';
-import { countdown, formatDay, formatTime, formatWhen, timeAgo } from '../lib/format.js';
+import { countdown, formatDay, formatTime, formatWhen } from '../lib/format.js';
 import { LIMITS, SHARLOOP_URL } from '../shared/rules.js';
 import { renderCover } from './components/cover.js';
 import { renderAvatar } from './components/avatar.js';
@@ -85,11 +86,8 @@ function createEventPage(id, initialData, context, { isNew }) {
   const rsvpBox = el('section', { class: 'panel rsvp', 'aria-labelledby': 'rsvp-heading' });
   const guestsBox = el('section', { class: 'panel', 'aria-labelledby': 'guests-heading' });
   const sharloopBox = el('div');
-  const wallList = el('ul', { class: 'wall__list' });
 
   let editingRsvp = false;
-  // The wall's name field, so an RSVP can fill it in for the visitor.
-  let wallNameInput = null;
 
   function renderHeader() {
     const { event, isHost } = state;
@@ -327,7 +325,6 @@ function createEventPage(id, initialData, context, { isNew }) {
       try {
         const result = await api.saveRsvp(id, { name: nameInput.value, status, note: noteInput.value });
         local.setName(result.rsvp.name);
-        if (wallNameInput && !wallNameInput.value.trim()) wallNameInput.value = result.rsvp.name;
         local.rememberInvite(state.event, 'guest');
         state = { ...state, rsvps: [...state.rsvps.filter((rsvp) => rsvp.id !== result.rsvp.id), result.rsvp] };
         editingRsvp = false;
@@ -470,7 +467,6 @@ function createEventPage(id, initialData, context, { isNew }) {
           available,
         });
         local.setName(result.rsvp.name);
-        if (wallNameInput && !wallNameInput.value.trim()) wallNameInput.value = result.rsvp.name;
         local.rememberInvite(state.event, 'guest');
         state = { ...state, rsvps: [...state.rsvps.filter((rsvp) => rsvp.id !== result.rsvp.id), result.rsvp] };
         showToast(available.length ? 'Oyun kaydedildi 🗳️' : 'Hiçbir saat uymuyor diye kaydettik');
@@ -500,37 +496,40 @@ function createEventPage(id, initialData, context, { isNew }) {
   }
 
   /**
-   * Plans shared from Sharloop: people with the app can open the plan there
-   * (a "coming" also goes into their calendar), the rest can join and add
-   * the host as a friend. Answering here works either way.
+   * Davet has no chat: messages and groups are Sharloop's, and this panel
+   * leads there. For a plan shared from Sharloop, people with the app can
+   * open the plan there (a "coming" also goes into their calendar), and
+   * the rest can join with the host found, ready to add as a friend.
+   * Answering here works either way.
    */
   function renderSharloop() {
     const { event } = state;
-    if (!event.sharloop) {
-      mount(sharloopBox);
-      return;
-    }
-    mount(
-      sharloopBox,
-      el(
-        'section',
-        { class: 'panel sharloop', 'aria-labelledby': 'sharloop-heading' },
-        el('h2', { id: 'sharloop-heading', text: 'Bu plan Sharloop’tan' }),
-        el('p', {
-          class: 'muted',
-          text: `${event.hostName} bu planı Sharloop’ta kurdu. Uygulaman varsa planı orada aç; “Geliyorum” dersen takvimine de eklenir. Yoksa buradan cevap vermen yeterli.`,
-        }),
-        el(
-          'div',
-          { class: 'button-row' },
+    const fromSharloop = Boolean(event.sharloop);
+    const buttons = fromSharloop
+      ? [
           el('a', { class: 'button', href: `${SHARLOOP_URL}/#davet=${id}`, rel: 'noopener' }, 'Sharloop’ta aç'),
           el(
             'a',
             { class: 'button button--secondary', href: `${SHARLOOP_URL}/?ekle=${event.sharloop.kod}`, rel: 'noopener' },
             'Sharloop’a katıl',
           ),
-        ),
-        event.sharloop.kullaniciAdi &&
+        ]
+      : [el('a', { class: 'button', href: SHARLOOP_URL, rel: 'noopener' }, 'Sharloop’u aç')];
+    mount(
+      sharloopBox,
+      el(
+        'section',
+        { class: 'panel sharloop', 'aria-labelledby': 'sharloop-heading' },
+        el('h2', { id: 'sharloop-heading', text: fromSharloop ? 'Bu plan Sharloop’tan' : 'Sohbet ve gruplar Sharloop’ta' }),
+        el('p', {
+          class: 'muted',
+          text: fromSharloop
+            ? `${event.hostName} bu planı Sharloop’ta kurdu. Uygulaman varsa planı orada aç; “Geliyorum” dersen takvimine de eklenir. ${event.hostName} ile mesajlaşmak ve grup kurmak için de Sharloop’u kullan.`
+            : 'Davet’te yalnızca davet ve cevaplar var. Arkadaşlarınla mesajlaşmak, grup kurmak ve sonraki planı birlikte ayarlamak için Sharloop’u kullan.',
+        }),
+        el('div', { class: 'button-row' }, buttons),
+        fromSharloop &&
+          event.sharloop.kullaniciAdi &&
           el('p', { class: 'sharloop__hint muted', text: `Sharloop’ta @${event.sharloop.kullaniciAdi} olarak bulabilirsin.` }),
       ),
     );
@@ -578,117 +577,11 @@ function createEventPage(id, initialData, context, { isNew }) {
     );
   }
 
-  function renderWallList() {
-    const comments = [...state.comments].reverse();
-    mount(
-      wallList,
-      comments.length === 0
-        ? el('li', { class: 'muted wall__empty', text: 'Henüz kimse yazmadı. Bir “Ben varım!” bırak.' })
-        : comments.map((comment) => {
-            const canDelete = state.isHost || comment.isMine;
-            return el(
-              'li',
-              { class: 'post' },
-              renderAvatar(comment.name),
-              el(
-                'div',
-                { class: 'post__body' },
-                el(
-                  'p',
-                  { class: 'post__meta' },
-                  el('strong', { text: comment.name }),
-                  el('span', { class: 'muted', text: ` · ${timeAgo(comment.createdAt)}` }),
-                ),
-                el('p', { class: 'post__text', text: comment.text }),
-              ),
-              canDelete &&
-                el(
-                  'button',
-                  {
-                    class: 'post__delete',
-                    type: 'button',
-                    'aria-label': `${comment.name} adlı kişinin mesajını sil`,
-                    onclick: async () => {
-                      try {
-                        await api.deleteComment(id, comment.id);
-                        state = { ...state, comments: state.comments.filter((item) => item.id !== comment.id) };
-                        renderWallList();
-                        showToast('Mesaj silindi');
-                      } catch (error) {
-                        showToast(error.message);
-                      }
-                    },
-                  },
-                  '✕',
-                ),
-            );
-          }),
-    );
-  }
-
-  function renderWall() {
-    const nameInput = el('input', {
-      id: 'wall-name',
-      maxlength: LIMITS.name,
-      autocomplete: 'given-name',
-      placeholder: 'Adın',
-      value: local.name(),
-    });
-    wallNameInput = nameInput;
-    const textInput = el('textarea', { id: 'wall-text', rows: 2, maxlength: LIMITS.comment, placeholder: 'Bir şey yaz…' });
-    const errorBox = el('p', { class: 'form-error', role: 'alert' });
-    const sendButton = el('button', { class: 'button', type: 'submit' }, 'Gönder');
-
-    async function onSubmit(event) {
-      event.preventDefault();
-      errorBox.textContent = '';
-      if (!nameInput.value.trim()) {
-        errorBox.textContent = 'Adını yazmayı unutma.';
-        nameInput.focus();
-        return;
-      }
-      if (!textInput.value.trim()) {
-        textInput.focus();
-        return;
-      }
-      sendButton.disabled = true;
-      try {
-        const { comment } = await api.addComment(id, { name: nameInput.value, text: textInput.value });
-        local.setName(comment.name);
-        state = { ...state, comments: [...state.comments, comment] };
-        textInput.value = '';
-        renderWallList();
-      } catch (error) {
-        errorBox.textContent = error.message;
-      } finally {
-        sendButton.disabled = false;
-      }
-    }
-
-    return el(
-      'section',
-      { class: 'panel wall', 'aria-labelledby': 'wall-heading' },
-      el('h2', { id: 'wall-heading', text: 'Duvar' }),
-      el(
-        'form',
-        { class: 'wall__form', onsubmit: onSubmit },
-        el('label', { class: 'visually-hidden', for: 'wall-name', text: 'Adın' }),
-        nameInput,
-        el('label', { class: 'visually-hidden', for: 'wall-text', text: 'Mesajın' }),
-        textInput,
-        errorBox,
-        el('div', { class: 'button-row' }, sendButton),
-      ),
-      wallList,
-    );
-  }
-
   renderHeader();
   renderCounts();
   renderRsvp();
   renderSharloop();
   renderGuests();
-  renderWallList();
 
   // Keep "Davetlerim" in sync with the latest title and time.
   if (state.isHost) local.rememberInvite(state.event, 'host');
@@ -698,7 +591,7 @@ function createEventPage(id, initialData, context, { isNew }) {
     'div',
     { class: 'event-layout' },
     el('div', { class: 'event-layout__main' }, headerBox, shareBox),
-    el('div', { class: 'event-layout__side' }, rsvpBox, sharloopBox, guestsBox, renderWall()),
+    el('div', { class: 'event-layout__side' }, rsvpBox, sharloopBox, guestsBox),
   );
 
   return {
@@ -714,7 +607,6 @@ function createEventPage(id, initialData, context, { isNew }) {
       renderCounts();
       if (pollClosed || (!editingRsvp && !rsvpBox.contains(document.activeElement))) renderRsvp();
       renderGuests();
-      renderWallList();
     },
   };
 }
